@@ -1,0 +1,11 @@
+Client Connected to server : Done
+
+2 Clients connected : Done
+
+Name the clients : Done
+
+Give clients option to see other clients : DONE
+
+Option to connect to a peer : DONE
+
+Actually connecting to the peer: 
