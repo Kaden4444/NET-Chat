@@ -119,8 +119,6 @@ class DemoGUI(customtkinter.CTk):
         self.client_connect_button = customtkinter.CTkButton(master=self.clients_frame, text="Connect to client", fg_color=button_colour,command=connect_to_client, border_width=1, border_color="black",text_color="black")
         self.client_connect_button.grid(row=1, column=0,padx=(10,10),pady=10 , sticky='nw')
 
-        global peer_ip
-
 def connect_to_server(button):
     name=""
     global client_id
@@ -230,10 +228,19 @@ def connect_to_client():
         client_connected_port = other_port
         client_connected_name = Message_Received.decode().split("-")[1]
         label.configure(text=f"Chatting to {client_name}")
-        listenerthread = threading.Thread(target=lambda: recieve_message((client_connected_name)))
-        listenerthread.start()
-    client.close()
-    if connectedToPeer:
+        
+        #client.close()
+        #listenerthread = threading.Thread(target= request_waiter())
+        #listenerthread.start()
+        
+    while connectedToPeer:
+        message = client.recv(2048)
+        print(message)
+        current = chat_box.get("0.0", "end")
+        chat_box.delete("0.0", "end")
+        current_time = time.strftime('%H:%M')  
+        chat_box.insert(("0.0"),f"{current}{client_connected_name}: {message.decode()}      [{current_time}]\n\n")
+        
         return
 
 # wait for request
@@ -241,12 +248,20 @@ def connect_to_client():
 def request_waiter():
     udpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udpSocket.bind(('', port_we_listen_on))
-        
+    connectedToPeer=False
     while True: # Wait for communication from a client
+        
+        while connectedToPeer:   # spinning on this the entire time while waiting for first message 
+                    message = udpSocket.recv(2048)
+                    print(message)
+                    current = chat_box.get("0.0", "end")
+                    chat_box.delete("0.0", "end")
+                    current_time = time.strftime('%H:%M')  
+                    chat_box.insert(("0.0"),f"{current}{requesters_name}: {message.decode()}      [{current_time}]\n\n")
+
         message, clientAddress = udpSocket.recvfrom(2048)
         print("Message Received:", message)
         request = message.decode().split("-")
-        
         requesters_name= request[2]
         if message.decode()[0:17] == "REQ-COMMUNICATION":
             print("Invite to chat received!")
@@ -259,13 +274,9 @@ def request_waiter():
                 client_connected_ip = clientAddress[0]
                 client_connected_port = clientAddress[1]
                 label.configure(text=f"Chatting to {requesters_name} ")
-                
-            listenerthread = threading.Thread(target=lambda: recieve_message(requesters_name))
-            listenerthread.start()
-            udpSocket.close()
-            break
-        else:
-            continue
+        
+        #udpSocket.close()
+
 
 
 
@@ -278,7 +289,7 @@ def send_message():
         clientSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         #print(client_connected_ip + "is the IP being sent to")
 
-        
+        entry_box.delete("0.0", "end")
         clientSocket.sendto(user_input.encode(),(client_connected_ip, client_connected_port))
         clientSocket.close() 
 
@@ -286,7 +297,8 @@ def send_message():
         if user_input:
             current = chat_box.get("0.0", "end")
             chat_box.delete("0.0", "end")
-            chat_box.insert("0.0",f"{current}You: {user_input}\n")
+            current_time = time.strftime('%H:%M')
+            chat_box.insert("0.0",f"{current}You: {user_input}      [{current_time}]\n\n")
 
 def recieve_message(name):
         udpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -300,6 +312,7 @@ def recieve_message(name):
             chat_box.delete("0.0", "end")
             current_time = time.strftime('%H:%M')  
             chat_box.insert(("0.0"),f"{current}{name}: {message.decode()}      [{current_time}]\n\n")
+            udpSocket.close()
 
 
 

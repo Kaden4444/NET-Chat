@@ -20,7 +20,7 @@ def main():
             
             if request_list[1] == "CONNECTION":
                 print("Client is requesting connection")
-                # We have a request for connection
+                # We have a request for connectionw
                 if request_list[2] not in active_clients.keys():
                     active_clients[request_list[2]] = ("CONNECTED", addr[0])
                     print("Currently Active Clients: ", active_clients)
