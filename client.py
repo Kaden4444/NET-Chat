@@ -211,19 +211,6 @@ def sendMessageToTCPServer(message):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 def CreateRequestConnectionMessage(name):
     return f"REQ-CONNECTION-{name}"
 
