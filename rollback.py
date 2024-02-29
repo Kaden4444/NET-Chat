@@ -8,6 +8,7 @@ import socket
 import threading
 import time
 import random
+import queue
 
 #general notes:
     # lamba allows you to pass parameters to functions that buttons will use, allowing you to configure a button when you click it (VERY USEFUL)
@@ -20,12 +21,17 @@ button_colour= "green"
 
 main_server_port = 12000
 port_we_listen_on = random.randrange(12001, 15000)
-port_we_send_on = random.randrange(12001, 15000)
-    
+
+hostname = socket.gethostname()
+our_ip = socket.gethostbyname(hostname)
+
 class DemoGUI(customtkinter.CTk):
     def __init__(self):
         super().__init__()
         self.configure(fg_color=background)
+        global q
+        q = queue.Queue()
+        global other_client_address
 
         # configure window
         self.title("Shit WhatsApp")
@@ -101,7 +107,7 @@ class DemoGUI(customtkinter.CTk):
         # button for changing client status
         self.set_status_button = customtkinter.CTkButton(master=self.clients_frame, text="Change Status", fg_color=button_colour, border_width=1, border_color="black",text_color="black")
         self.set_status_button.grid(row=0, padx=10, pady=10 , sticky='nw')
-        self.set_status_button.configure(command= lambda:change_status_to_available(self.set_status_button))
+        self.set_status_button.configure(command= lambda:change_status_to_available(self.set_status_button,q))
         
         # create textbox         
         self.textbox = customtkinter.CTkTextbox(self.clients_frame, fg_color="white", activate_scrollbars=True,text_color="black", border_color="black", border_width=1)
@@ -121,20 +127,19 @@ class DemoGUI(customtkinter.CTk):
 
 def connect_to_server(button):
     name=""
-    global client_id
+    global our_name
     try: 
         dialog = customtkinter.CTkInputDialog(text="Enter your name", title="Connecting to server")
         name = dialog.get_input()
-        client_id = name
+        our_name = name
         #enter Ip manually
         global main_server_ip
-        server_ip_prompt = customtkinter.CTkInputDialog(text="Enter the server IP", title="Connect to a server")
-        main_server_ip = server_ip_prompt.get_input()
+        #server_ip_prompt = customtkinter.CTkInputDialog(text="Enter the server IP", title="Connect to a server")
+        #main_server_ip = server_ip_prompt.get_input()
         
         #set it manually
-        #global main_server_ip
         #main_server_ip="192.168.68.118"
-        #"192.168.249.65"
+        main_server_ip="196.47.211.160"
 
         send_TCP_message(CreateRequestConnectionMessage(name))
 
@@ -151,7 +156,7 @@ def disconnect_from_server(button):
 
 def send_TCP_message(message):
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    print(main_server_ip + " is supposed to be IP")
+    print("sending to" + main_server_ip)
     try:
         client.connect((main_server_ip, main_server_port)) 
         client.send(message.encode('utf-8'))
@@ -187,14 +192,19 @@ def populate_client_list(textbox):
         errorbox = tkinter.messagebox.Message(master=None, message="Failed to receive clients.", title = "Error")
         errorbox.show()
 
-def change_status_to_available(button):
-    send_TCP_message(CreateAssertAvailableMessage(client_id,port_we_listen_on))
-    waiterthread = threading.Thread(target=request_waiter)
+def change_status_to_available(button,q):
+    send_TCP_message(CreateAssertAvailableMessage(our_name,port_we_listen_on))
+    global UDPSocket 
+    UDPSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    address = ('',port_we_listen_on)
+    UDPSocket.bind(address)
+    global waiterthread
+    waiterthread = threading.Thread(target=lambda: request_waiter(UDPSocket, q))
     waiterthread.start()
     button.configure(fg_color="red", text="Change Status", command=lambda: change_status_to_connected(button))
 
 def change_status_to_connected(button):
-    send_TCP_message(CreateAssertChangeVis(client_id,port_we_listen_on))
+    send_TCP_message(CreateAssertChangeVis(our_name,port_we_listen_on))
     button.configure(fg_color=button_colour, text="Change Status", command=lambda: change_status_to_available(button))
 
     
@@ -203,118 +213,92 @@ def connect_to_client():
     client_name = dialog.get_input()
     other_client_details = send_TCP_message(CreateRequestClientInfoMessage(client_name)).split("-")
 
+
     other_client_ip_and_port = other_client_details[2]
     other_ip = other_client_ip_and_port.split(" ")[0]
     other_port = (int)(other_client_ip_and_port.split(" ")[1])
+
     
+    print(f"Sending to {client_name} {other_ip} {other_port}")
+    #print(f"my name: {client_name}\nmy ip: {client_name}\nmy port: {port_we_listen_on}\nTheir ip: {other_ip}\nTheir port: {other_port}")
     
-    other_client_ip = other_ip
-    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    print(f"Sending to client {other_ip} {other_port}")
-    
-    print(f"my ip: {client_id}\nmy port: {port_we_listen_on}\nTheir ip: {other_ip}\nTheir port: {other_port}")
-    
-    
-    client.sendto(CreateRequestPeerToPeerCommunication(client_id, port_we_send_on).encode(),(other_ip, other_port))
-    Message_Received, client_address = client.recvfrom(2048)
-    print(Message_Received)
-    if Message_Received.decode()[0:4] == "OKAY":
-        global connectedToPeer
-        global client_connected_ip
-        global client_connected_port
-        global client_connected_name
-        connectedToPeer = True
-        client_connected_ip = other_ip
-        client_connected_port = other_port
-        client_connected_name = Message_Received.decode().split("-")[1]
-        label.configure(text=f"Chatting to {client_name}")
-        
-        #client.close()
-        #listenerthread = threading.Thread(target= request_waiter())
-        #listenerthread.start()
-        
-    while connectedToPeer:
-        message = client.recv(2048)
-        print(message)
-        current = chat_box.get("0.0", "end")
-        chat_box.delete("0.0", "end")
-        current_time = time.strftime('%H:%M')  
-        chat_box.insert(("0.0"),f"{current}{client_connected_name}: {message.decode()}      [{current_time}]\n\n")
-        
-        return
+    UDPSocket.sendto(CreateRequestPeerToPeerCommunication(our_name, our_ip , port_we_listen_on).encode(),(other_ip, other_port)) # Only sends, then is finished
+
+
 
 # wait for request
 # idea is that this is created on a seperate thread, it spins and waits for a message
-def request_waiter():
-    udpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    udpSocket.bind(('', port_we_listen_on))
-    connectedToPeer=False
-    while True: # Wait for communication from a client
+def request_waiter(socket,q): # this port is (port we listen on - whoever is running this thread will recieve messages on the port that is randomly made)
+        print(f"Listener socket for {our_name} ")
+        connectedToPeer = False
+        peer_address=""
+        peer_ip=""
+        message=""
         
-        while connectedToPeer:   # spinning on this the entire time while waiting for first message 
-                    message = udpSocket.recv(2048)
-                    print(message)
-                    current = chat_box.get("0.0", "end")
-                    chat_box.delete("0.0", "end")
-                    current_time = time.strftime('%H:%M')  
-                    chat_box.insert(("0.0"),f"{current}{requesters_name}: {message.decode()}      [{current_time}]\n\n")
-
-        message, clientAddress = udpSocket.recvfrom(2048)
-        print("Message Received:", message)
-        request = message.decode().split("-")
-        requesters_name= request[2]
-        if message.decode()[0:17] == "REQ-COMMUNICATION":
-            print("Invite to chat received!")
-            reqbox = tkinter.messagebox.askyesno(title="A request has arrived", message=f"{requesters_name} would like to chat, accept? (y/n)", )
-            if reqbox:
-                udpSocket.sendto(f"OKAY-{client_id}".encode(), clientAddress)
-                connectedToPeer = True
-                global client_connected_ip
-                global client_connected_port
-                client_connected_ip = clientAddress[0]
-                client_connected_port = clientAddress[1]
-                label.configure(text=f"Chatting to {requesters_name} ")
-        
-        #udpSocket.close()
-
+        while True:
+            if not connectedToPeer: # While this thread is alive 
+                message, peer_address = UDPSocket.recvfrom(2024)   # receive messages from anyone 
+                peer_ip = peer_address[0]
+                message = message.decode()
+                print(f"Message: {message}")
+                
+                if message[0:17] == "REQ-COMMUNICATION":
+                        print(f"Invite to chat received! I am {our_name}")
+                        socket.sendto(f"OKAY-{our_name}".encode(), peer_address)
+                        print("req: " + message)
+                        accepted_peer = peer_address[0]
+                        accepted_peer_name = message.split("-")[2]
+                        q.put(peer_address)
+                        label.configure(text=f"Chatting to {accepted_peer_name} ")
+                        connectedToPeer = True
+                        
+                
+                if message[0:5] == "OKAY-":  # the other receiver must also know
+                    accepted_peer = peer_address[0]
+                    accepted_peer_name = message.split("-")[1]  #this is not getting back to the main thread
+                    q.put(peer_address)
+                    print(f"OKAY FROM {accepted_peer_name}")
+                    label.configure(text=f"Chatting to {accepted_peer_name} ")
+                    connectedToPeer=True
+                    
+                
+            while connectedToPeer:
+                message, peer_address = UDPSocket.recvfrom(2024)
+                peer_ip = peer_address[0]
+                message = message.decode() 
+                if peer_ip == accepted_peer:
+                    print(f"Message: {message} recieved successfully")
+                    chat_box.insert("0.0",f"them: {message}      \n")
+                continue
+                    
 
 
 
 ### TESTING
 
 def send_message():
-        # This is the function running in the main thread
-        
         user_input = entry_box.get("0.0", "end")
-        clientSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        #print(client_connected_ip + "is the IP being sent to")
-
         entry_box.delete("0.0", "end")
-        clientSocket.sendto(user_input.encode(),(client_connected_ip, client_connected_port))
-        clientSocket.close() 
-
-        # Add locally but must also send it forward
-        if user_input:
+        
+        if not q.empty():
+            other_client_address = q.get()
+            q.put(other_client_address)
+            print(f"Sending to {other_client_address}")
+            UDPSocket.sendto(user_input.encode(), other_client_address)
             current = chat_box.get("0.0", "end")
             chat_box.delete("0.0", "end")
             current_time = time.strftime('%H:%M')
-            chat_box.insert("0.0",f"{current}You: {user_input}      [{current_time}]\n\n")
+            chat_box.insert("0.0",f"{current}You: {user_input}      [{current_time}]\n")
 
-def recieve_message(name):
-        udpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        udpSocket.bind(('', port_we_listen_on))
-
-        while True:
-            # Receive the message from the client conversing withgit 
-            message = udpSocket.recv(2048)
-            print(message)
-            current = chat_box.get("0.0", "end")
-            chat_box.delete("0.0", "end")
-            current_time = time.strftime('%H:%M')  
-            chat_box.insert(("0.0"),f"{current}{name}: {message.decode()}      [{current_time}]\n\n")
-            udpSocket.close()
-
-
+        else:
+                print("Other client address:" + other_client_address)
+                UDPSocket.sendto(user_input.encode(), other_client_address)
+                current = chat_box.get("0.0", "end")
+                chat_box.delete("0.0", "end")
+                current_time = time.strftime('%H:%M')
+                chat_box.insert("0.0",f"{current}You: {user_input}      [{current_time}]\n")
+            
+                print("Send failed")
 
 
 def CreateRequestConnectionMessage(name):
@@ -335,8 +319,8 @@ def CreateRequestClientListMessage():
 def CreateRequestClientInfoMessage(user):
     return f"REQ-CLIENT-{user}"
 
-def CreateRequestPeerToPeerCommunication(name, our_port):
-    return f"REQ-COMMUNICATION-{name}-{our_port}"
+def CreateRequestPeerToPeerCommunication(name, our_ip ,our_port):
+    return f"REQ-COMMUNICATION-{name}-{our_ip}-{our_port}"
 
 if __name__ == "__main__":
     app = DemoGUI()

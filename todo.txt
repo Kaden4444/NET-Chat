@@ -1,0 +1,9 @@
+make an acceptor thread for sending okay, change both their labels, close both clients
+threads when clicking send (only activeate send button when connected to peer)
+
+then every time we send, we grab the labels name, use the server to grab ip and port, and finally send the message
+
+
+
+option 2:
+create a single chat port, that way, it will just send and recieve on one port, without needing to know about labels or names or anything
