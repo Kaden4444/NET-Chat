@@ -7,6 +7,7 @@ print("The server is ready to receive")
 
 def main():
     active_clients = {}
+    files_permissions_dict = {} # A dictionary that contains (filename, clients allowed to view) pairs
     while True:
         connectionSocket, addr = serverSocket.accept()
 
@@ -14,41 +15,44 @@ def main():
         request = connectionSocket.recv(1024).decode()
         request_list = request.split("-")
 
-        # These is the implementation of all the [REQ] commands that we defined.
+        # These is the implementation of all the [REQ] commands that we defined. 
         if request_list[0] == "REQ":
-            print("Received request from client")
-            
+
             if request_list[1] == "CONNECTION":
-                print("Client is requesting connection")
-                # We have a request for connectionw
+                # We have a request for connection
                 if request_list[2] not in active_clients.keys():
                     active_clients[request_list[2]] = ("CONNECTED", addr[0])
+                    print(f"Added a new user: {request_list[2]} to the server.")
                     print("Currently Active Clients: ", active_clients)
+                    connectionSocket.send("RET-CONNSUCCESS".encode())
+                else:
+                    connectionSocket.send("RET-CONNFAIL".encode())
+                
 
             # Returns the current client list from the server, (only available clients are returned) the list returned is a space seperated list of names with the headers RET-CLIENTLIST prepended
             if request_list[1] == "CLIENT_LIST":
-                print("Client is requesting the client list")
                 available_clients = "RETURN-CLIENTLIST-" + get_available_clients(active_clients)
                 connectionSocket.send(available_clients.encode())
 
+            if request_list[1] == "CONNECTED_LIST":
+                connectionSocket.send(" ".join(active_clients.keys()).encode())
             # Returns the IP address and listening port of a client requested, the string sent back is just the ip and port seperated by a space with the headers RET-CLIENTINFO prepended
             if request_list[1] == "CLIENT":
-                print("Client is requesting a client's information")
                 client_id = request_list[2]
-                print("The client requested is " + client_id)
                 if client_id in active_clients.keys():
                     udp_ip_of_client_requested = active_clients[client_id][1]
                     udp_ip_port = active_clients[client_id][2]
                     connectionSocket.send(("RET-CLIENTINFO-" + udp_ip_of_client_requested + " " +  udp_ip_port).encode())
-                    print(udp_ip_of_client_requested + " " + udp_ip_port)
 
+            if request_list[1] == "FILES":
+                connectionSocket.send(("RET-FILELIST-" + ",".join(files_permissions_dict.keys())).encode())
 
         elif request_list[0] == "COMMAND":
             if request_list[1] == "AVAIL":
                 # This command changes the status of a client to available on the server's list.
                 if (request_list[2] in active_clients.keys()):
                     active_clients[request_list[2]] = ("AVAILABLE", ) + (active_clients[request_list[2]][1],) + (request_list[3],)
-                    print(f"Added a new user: {request_list[2]} to the server.")
+                    print(f"{request_list[2]} is now ready to chat.")
                     print("Currently Active Clients: ", active_clients)
                 else:
                     print("ERROR: An availability check without prior connection attempted")
@@ -70,14 +74,68 @@ def main():
                     print("Currently Active Clients: ", active_clients)
                 else:
                     print("ERROR: Invalid operation involving CHANGEVIS")
+            
+            if request_list[1] == "UPLOAD":
+                # Client is trying to upload a file to the server
+                if request_list[2] == "ALL":
+                    # The file is suitable for all to see
+                    file_name_ = request_list[3].split(".") # This is done in order to obtain the file extension from the rest of the filename
+                    filename = file_name_[0] + " " + request_list[5] + "." + file_name_[1]# this ensures the names are unique
+                    if filename not in files_permissions_dict.keys(): 
+                        files_permissions_dict[filename] = "ALL"
+                        # Write the file to disk locally on the server
+                        with open(filename, "w") as file:
+                            # Write the string data to the file
+                            file.write(request_list[6]) # will write the file to disk locally
+                    
+                else:
+                    file_name_ = request_list[3].split(".") # This is done in order to obtain the file extension from the rest of the filename
+                    filename = file_name_[0] + " " + request_list[5] + "." + file_name_[1]# this ensures the names are unique
+                    if filename not in files_permissions_dict.keys():
+                        files_permissions_dict[filename] = request_list[2]
+                        with open(filename, "w") as file:
+                            # Write the string data to the file
+                            file.write(request_list[6]) # will write the file to disk locally
+                    # Only one client is allowed to see the file
+                            
+                # Now what do we return? Probably a message saying file was received
+                connectionSocket.send("CONFIRM_FILE_RECEIVED".encode())
 
+            
+            if request_list[1] == "DOWNLOAD":
+                # Need to ensure the client who sent the message has access
+                file_name = request_list[2]
+                if file_name in files_permissions_dict.keys():
+                    # should be since it would be checked for on the client side
+                    if files_permissions_dict[filename] == "ALL":
+                        # it's fine to just transmit it back to the client that sent the request
+                        with open(file_name, "r") as file:
+                            # Read the entire contents of the file
+                            file_contents = file.read()
+                            connectionSocket.send(file_contents.encode()) # Send the file to the client that requested it
+
+                    elif files_permissions_dict[filename] == request_list[3]: # if the only allowed user has requested it allow the download
+                        with open(file_name, "r") as file:
+                            # Read the entire contents of the file
+                            file_contents = file.read()
+                            connectionSocket.send(file_contents.encode())
+
+                    else: # happens if we try to access a document we don't have permission to access
+                        # Access denied 
+                        connectionSocket.send("RET-ACCESSDENIED".encode())
+
+            if request_list[1] == "BUSYCHAT":
+                print(f"{request_list[2]} is now busy chatting.")
+                active_clients[request_list[2]] = ("CHATTING", active_clients[request_list[2]][1])
+                print("Currently Active Clients: ", active_clients)
+            
         connectionSocket.close()
 
 def get_available_clients(d):
     out = ''
     for client in d.keys():
         if d[client][0] == "AVAILABLE":
-            out += " " + client
+            out += client + " "
     return out
 
 main()

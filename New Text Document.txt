@@ -1,4 +1,0 @@
-pip install -r requirements.txt
-
-name cant be empty
-cant connect to another client while chatting, must disconnect (make disconnect only active while chatting)
