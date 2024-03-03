@@ -1,8 +1,0 @@
-pip install -r requirements.txt
-
-INORDER:
-
-add file sending stuff
-add encryption
-
-Test all features

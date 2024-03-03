@@ -18,6 +18,8 @@ This is a client-server and client-client communication application.
 - ## Networking Details:
   Client communicate to the server through TCP, a server stores the client's IPs and Port #s. When a client requests to speak to another client, the server provides them with said client's details
   from this point onwards, the two clients are connected through UDP without the servers interference.
+- ## File sending
+  Currently only textfiles are supported. A request will be sent to the client, and upon acceptance, the app will download the file into the clients folder
 
 ## Other Notes
 

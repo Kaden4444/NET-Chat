@@ -201,7 +201,6 @@ def disconnect_from_server(button):
 
 def send_TCP_message(message):
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    print("sending to" + main_server_ip)
     client.connect((main_server_ip, main_server_port))
     client.send(message.encode('utf-8'))
     response = client.recv(1024).decode('utf-8')
@@ -212,7 +211,6 @@ def populate_client_list(textbox):
     try:
         response = send_TCP_message(CreateRequestClientListMessage()).split("-")[2]
         
-        print(response)
         if response == "":
             textbox.configure(state="normal")
             textbox.delete(0.0, 'end')
@@ -300,7 +298,6 @@ def request_waiter(q): # this port is (port we listen on - whoever is running th
                 message, peer_address = UDPSocket.recvfrom(2024)   # receive messages from anyone 
                 peer_ip = peer_address[0]
                 message = message.decode()
-                print(f"Message: {message}")
                 
                 if message[0:17] == "REQ-COMMUNICATION":
                         accepted_peer = peer_address[0]
@@ -364,7 +361,7 @@ def request_waiter(q): # this port is (port we listen on - whoever is running th
                                 
                             f = open(filename, "w")
                             f.write(file_contents)
-                            time.sleep(1)
+                            
                             filebox = tkinter.messagebox.Message(master=None, message="File Downloaded", title = "File")
                             filebox.show()
                             f.close()
