@@ -268,7 +268,6 @@ def connect_to_client():
         print(f"Sending to {client_name} {other_ip} {other_port}")
         
         UDPSocket.sendto(CreateRequestPeerToPeerCommunication(our_name, our_ip , port_we_listen_on).encode(),(other_ip, other_port)) # Only sends, then is finished
-        
     except:
         errorbox = tkinter.messagebox.Message(master=None, message="Failed to connect to a client - please check that they are available and their username is spelt correctly", title = "Error")
         errorbox.show() 
@@ -309,6 +308,7 @@ def request_waiter(q): # this port is (port we listen on - whoever is running th
                             q.put(peer_address)
                             label.configure(text=f"Chatting to {accepted_peer_name} ")
                             enable_client_buttons()
+                            disable_server_buttons()
                             connectedToPeer = True
                             send_TCP_message(CreateBusyChatMessage(our_name))
                         else:
@@ -323,6 +323,7 @@ def request_waiter(q): # this port is (port we listen on - whoever is running th
                     
                     send_TCP_message(CreateBusyChatMessage(our_name))
                     enable_client_buttons()
+                    disable_server_buttons()
                     connectedToPeer=True
                     
                 
@@ -343,6 +344,8 @@ def request_waiter(q): # this port is (port we listen on - whoever is running th
                         send_TCP_message(CreateAssertAvailableMessage(our_name, port_we_listen_on))
                         disconnect_from_client_button.configure(state="disabled")
                         send_button.configure(state="disabled")
+                        enable_server_buttons()
+                        disable_client_buttons()
                         continue
                                              
                     if message == "CONTROL-RETRANS":
@@ -411,6 +414,11 @@ def disconnect_client():
         q.put(other_client_address)
         message = "END-CHAT"
         UDPSocket.sendto(message.encode(), other_client_address)
+        
+    label.configure(text=f"Connect to a client to chat:")
+    send_TCP_message(CreateAssertAvailableMessage(our_name, port_we_listen_on))
+    disable_client_buttons()
+    enable_server_buttons()
 
 def upload_file():
     filename = filedialog.askopenfilename(filetypes=[("Text files", ".txt"), ("Image Files", ".png .jpg")])
