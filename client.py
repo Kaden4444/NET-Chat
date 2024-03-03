@@ -2,6 +2,7 @@
 import tkinter
 import tkinter.messagebox
 import customtkinter
+from customtkinter import filedialog
 
 # Networking
 import socket
@@ -24,6 +25,12 @@ port_we_listen_on = random.randrange(12001, 15000)
 
 hostname = socket.gethostname()
 our_ip = socket.gethostbyname(hostname)
+
+# global messages_sent
+# messages_sent=0
+
+#global messages_sent_map
+#messages_sent_map = {}
 
 class DemoGUI(customtkinter.CTk):
     def __init__(self):
@@ -52,7 +59,7 @@ class DemoGUI(customtkinter.CTk):
         self.clients_frame.grid(row=0, column=0, rowspan="3", sticky="nswe")
         
         # main frame (hehe)
-        self.main_frame = customtkinter.CTkFrame(master=self, corner_radius=10, fg_color=frame_colour) 
+        self.main_frame = customtkinter.CTkFrame(master=self, fg_color=frame_colour) 
         self.main_frame.grid(row=0, column=1, padx=(5,0), sticky="nswe")
         self.main_frame.columnconfigure(0, weight=1)
         
@@ -88,9 +95,18 @@ class DemoGUI(customtkinter.CTk):
         entry_box = self.entry_textbox
 
         # enter button
+        global send_button
         self.chat_button = customtkinter.CTkButton(master=self.main_frame, text="Send", fg_color=button_colour, border_width=1, border_color="black",text_color="black",command=send_message)
         self.chat_button.grid(row=3, sticky='ne', padx=(0,10), pady=(10,0))
-        #self.chat_button.configure(command= lambda:connect_to_server(client,self.server_button))
+        self.chat_button.configure(state="disabled")
+        send_button = self.chat_button
+        
+        global file_button
+        self.file_button = customtkinter.CTkButton(master=self.main_frame, text="Files", fg_color=button_colour, border_width=1, border_color="black",text_color="black",command=upload_file)
+        self.file_button.grid(row=3, sticky='nw', padx=(10,0), pady=(10,0))
+        self.file_button.configure(state="disabled")
+        file_button = self.file_button
+        
 
         #configure client frame grid
         self.clients_frame.columnconfigure(0, weight=1)
@@ -150,9 +166,6 @@ def connect_to_server(button):
             errorbox = tkinter.messagebox.Message(master=None, message="Please enter an IP", title = "Error")
             errorbox.show() 
             return
-        
-
-
 
         send_TCP_message(CreateRequestConnectionMessage(name))
 
@@ -163,9 +176,7 @@ def connect_to_server(button):
 
 def disconnect_from_server(button):
     try:
-        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client.send("DISCONNECT".encode('utf-8'))
-        client.close()
+        send_TCP_message(CreateAssertUnavailableMessage(our_name))
         button.configure(text="Connect to server", fg_color=button_colour , command= lambda:connect_to_server(button))
     except:
         errorbox = tkinter.messagebox.Message(master=None, message="Failed to disconnect", title = "Error")
@@ -174,12 +185,11 @@ def disconnect_from_server(button):
 def send_TCP_message(message):
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     print("sending to" + main_server_ip)
-    client.connect((main_server_ip, main_server_port)) 
+    client.connect((main_server_ip, main_server_port))
     client.send(message.encode('utf-8'))
     response = client.recv(1024).decode('utf-8')
     client.close()
     return response
-
 
 def populate_client_list(textbox):
     try:
@@ -196,9 +206,8 @@ def populate_client_list(textbox):
             textbox.delete(0.0, 'end')
             new = response.split(" ")
             new = "\n".join(new)  #this took forever to figure out 
-            print(new)
             textbox.insert("0.0",f"Available clients:\n{new}")
-            print(response)
+
             
             textbox.configure(state="disabled")
     except:
@@ -213,7 +222,7 @@ def change_status_to_available(button,q):
         address = ('',port_we_listen_on)
         UDPSocket.bind(address)
         global waiterthread
-        waiterthread = threading.Thread(target=lambda: request_waiter(UDPSocket, q))
+        waiterthread = threading.Thread(target=lambda: request_waiter(q))
         waiterthread.start()
         button.configure(fg_color="red", text="Change Status", command=lambda: change_status_to_connected(button))
     except:
@@ -237,8 +246,6 @@ def connect_to_client():
             errorbox.show() 
             return
         other_client_details = send_TCP_message(CreateRequestClientInfoMessage(client_name)).split("-")
-
-
         other_client_ip_and_port = other_client_details[2]
         other_ip = other_client_ip_and_port.split(" ")[0]
         other_port = (int)(other_client_ip_and_port.split(" ")[1])
@@ -251,10 +258,20 @@ def connect_to_client():
         errorbox = tkinter.messagebox.Message(master=None, message="Failed to connect to a client - please check that they are available and their username is spelt correctly", title = "Error")
         errorbox.show() 
 
+def enable_client_buttons():
+    send_button.configure(state="normal")
+    disconnect_from_client_button.configure(state="normal") 
+    file_button.configure(state="normal")
+    
+
+def disable_client_buttons():
+    send_button.configure(state="disabled")
+    disconnect_from_client_button.configure(state="disabled")
+    file_button.configure(state="disabled")
 
 # wait for request
 # idea is that this is created on a seperate thread, it spins and waits for a message
-def request_waiter(socket,q): # this port is (port we listen on - whoever is running this thread will recieve messages on the port that is randomly made)
+def request_waiter(q): # this port is (port we listen on - whoever is running this thread will recieve messages on the port that is randomly made)
         print(f"Listener socket for {our_name} ")
         connectedToPeer = False
         peer_address=""
@@ -272,28 +289,26 @@ def request_waiter(socket,q): # this port is (port we listen on - whoever is run
                         accepted_peer = peer_address[0]
                         accepted_peer_name = message.split("-")[2]
                         
-                        msg_box = tkinter.messagebox.askquestion('Incoming request', f'{accepted_peer_name} has requested to speak to you, do you accept?',
-                                        icon='question')
+                        msg_box = tkinter.messagebox.askquestion('Incoming request', f'{accepted_peer_name} has requested to speak to you, do you accept?', icon='question')
                         if msg_box == 'yes':
                             UDPSocket.sendto(f"OKAY-{our_name}".encode(), peer_address)
                             q.put(peer_address)
                             label.configure(text=f"Chatting to {accepted_peer_name} ")
-                            
-                            disconnect_from_client_button.configure(state="normal")
+                            enable_client_buttons()
                             connectedToPeer = True
                             send_TCP_message(CreateBusyChatMessage(our_name))
                         else:
                             return
                         
-                
                 if message[0:5] == "OKAY-":  # the other receiver must also know
                     accepted_peer = peer_address[0]
                     accepted_peer_name = message.split("-")[1]  #this is not getting back to the main thread
                     q.put(peer_address)
                     print(f"OKAY FROM {accepted_peer_name}")
                     label.configure(text=f"Chatting to {accepted_peer_name} ")
-                    disconnect_from_client_button.configure(state="normal")
+                    
                     send_TCP_message(CreateBusyChatMessage(our_name))
+                    enable_client_buttons()
                     connectedToPeer=True
                     
                 
@@ -302,6 +317,9 @@ def request_waiter(socket,q): # this port is (port we listen on - whoever is run
                 peer_ip = peer_address[0]
                 message = message.decode() 
                 if peer_ip == accepted_peer:
+
+                
+                
                     if message=="END-CHAT":
                         chat_box.delete("0.0", "end")
                         entry_box.delete("0.0", "end")
@@ -310,15 +328,28 @@ def request_waiter(socket,q): # this port is (port we listen on - whoever is run
                         connectedToPeer=False
                         send_TCP_message(CreateAssertAvailableMessage(our_name, port_we_listen_on))
                         disconnect_from_client_button.configure(state="disabled")
-                    else:
+                        send_button.configure(state="disabled")
+                        continue
+                                             
+                    if message == "CONTROL-RETRANS":
+                        errorbox = tkinter.messagebox.Message(master=None, message="Your last message failed to arrive, please resend it", title = "Message not sent")
+                        errorbox.show()
+                        continue
+                                                    
+                    elif message[0:4] == "DATA":
+                        messagesize = int(message.split("-")[1])
+                        message=message.split("-")[2]
+
+                        if len(message) != messagesize:
+                            UDPSocket.sendto("CONTROL-RETRANS".encode(),(peer_address))
+                            continue
+                        
                         current = chat_box.get("0.0", "end")
                         chat_box.delete("0.0", "end")
                         current_time = time.strftime('%H:%M')
                         chat_box.insert("0.0",f"{current}Peer: {message}      [{current_time}]\n")
                         chat_box.yview(tkinter.END)
                 continue
-                    
-### TESTING
 
 def send_message():
         user_input = entry_box.get("0.0", "end")
@@ -327,16 +358,20 @@ def send_message():
         if not q.empty():
             other_client_address = q.get()
             q.put(other_client_address)
-            print(f"Sending to {other_client_address}")
-            UDPSocket.sendto(user_input.encode(), other_client_address)
+            message = CreateMessage(user_input)
+            UDPSocket.sendto(message.encode(), other_client_address)
             current = chat_box.get("0.0", "end")
             chat_box.delete("0.0", "end")
             current_time = time.strftime('%H:%M')
             chat_box.insert("0.0",f"{current}You: {user_input}      [{current_time}]\n")
             chat_box.yview(tkinter.END)
-        else: 
+            #messages_sent += 1
+        else:
                 print("Send failed")
 
+def CreateMessage(message):
+    size = len(message)
+    return f"DATA-{size}-{message}"
 
 def disconnect_client():
     entry_box.delete("0.0", "end")
@@ -347,8 +382,15 @@ def disconnect_client():
         message = "END-CHAT"
         UDPSocket.sendto(message.encode(), other_client_address)
 
-def disconnect_from_server():
+def upload_file():
+    filename = filedialog.askopenfilename()
+    
+    print(filename) 
     return
+
+def download_file():
+    return
+
 
 def CreateRequestConnectionMessage(name):
     return f"REQ-CONNECTION-{name}"
@@ -373,6 +415,12 @@ def CreateRequestPeerToPeerCommunication(name, our_ip ,our_port):
 
 def CreateBusyChatMessage(client_id):
     return f"COMMAND-BUSYCHAT-{client_id}"
+
+def CreateFilePackage(visibility, filename, filesize, clientid, filecontents):
+    return f"COMMAND-UPLOAD-{visibility}-{filename}-{filesize}-{clientid}-{filecontents}"
+
+def CreateDownloadFileCommand(filename, client_id):
+    return f"COMMAND-DOWNLOAD-{filename}-{client_id}"
 
 if __name__ == "__main__":
     app = DemoGUI()

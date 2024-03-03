@@ -1,6 +1,8 @@
 pip install -r requirements.txt
 
 INORDER:
-Make a disconnect from server button
+
 add file sending stuff
 add encryption
+
+Test all features
