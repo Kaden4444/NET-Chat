@@ -3,6 +3,11 @@
 ### Kaden Carey
 
 This is a client-server and client-client communication application.
+Please install all requirments from requirments.txt by entering in the command line of this file:
+
+```
+pip install -r requirements. txt
+```
 
 - ## Connecting to the server
 
@@ -20,7 +25,9 @@ This is a client-server and client-client communication application.
   from this point onwards, the two clients are connected through UDP without the servers interference.
 - ## File sending
   Currently only textfiles are supported. A request will be sent to the client, and upon acceptance, the app will download the file into the clients folder
+- ## Multithreading
+  Each client has a listener thread that starts when they become available to the server. This thread listens for any udp connections or messages from peers.
 
 ## Other Notes
 
-    The GUI used for this application is an extension to Tkinter called customTkinter. I learnt to use this within two days, to some decent affect.
+The GUI used for this application is an extension to Tkinter called customTkinter. I learnt to use this within two days, to some decent affect.

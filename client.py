@@ -26,11 +26,7 @@ port_we_listen_on = random.randrange(12001, 15000)
 hostname = socket.gethostname()
 our_ip = socket.gethostbyname(hostname)
 
-# global messages_sent
-# messages_sent=0
-
-#global messages_sent_map
-#messages_sent_map = {}
+listener_created = False
 
 class DemoGUI(customtkinter.CTk):
     def __init__(self):
@@ -195,6 +191,7 @@ def disconnect_from_server(button):
         send_TCP_message(CreateAssertUnavailableMessage(our_name, port_we_listen_on))
         button.configure(text="Connect to server", fg_color=button_colour , command= lambda:connect_to_server(button))
         disable_server_buttons()
+        status_button.configure(fg_color=button_colour)
     except:
         errorbox = tkinter.messagebox.Message(master=None, message="Failed to disconnect", title = "Error")
         errorbox.show()
@@ -237,8 +234,9 @@ def change_status_to_available(button,q):
         address = ('',port_we_listen_on)
         UDPSocket.bind(address)
         global waiterthread
-        waiterthread = threading.Thread(target=lambda: request_waiter(q))
-        waiterthread.start()
+        if not listener_created:
+            waiterthread = threading.Thread(target=lambda: request_waiter(q))
+            waiterthread.start()
         button.configure(fg_color="red", text="Change Status", command=lambda: change_status_to_connected(button))
     except:
         errorbox = tkinter.messagebox.Message(master=None, message="Failed to change status", title = "Error")
@@ -247,7 +245,7 @@ def change_status_to_available(button,q):
 def change_status_to_connected(button):
     try:
         send_TCP_message(CreateAssertChangeVis(our_name,port_we_listen_on))
-        button.configure(fg_color=button_colour, text="Change Status", command=lambda: change_status_to_available(button))
+        button.configure(fg_color=button_colour, text="Change Status", command=lambda: change_status_to_available(button,q))
     except:
         errorbox = tkinter.messagebox.Message(master=None, message="Failed to change status", title = "Error")
         errorbox.show()   
