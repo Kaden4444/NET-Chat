@@ -102,7 +102,7 @@ class DemoGUI(customtkinter.CTk):
         send_button = self.chat_button
         
         global file_button
-        self.file_button = customtkinter.CTkButton(master=self.main_frame, text="Files", fg_color=button_colour, border_width=1, border_color="black",text_color="black",command=upload_file)
+        self.file_button = customtkinter.CTkButton(master=self.main_frame, text="Send a file", fg_color=button_colour, border_width=1, border_color="black",text_color="black",command=upload_file)
         self.file_button.grid(row=3, sticky='nw', padx=(10,0), pady=(10,0))
         self.file_button.configure(state="disabled")
         file_button = self.file_button
@@ -121,9 +121,11 @@ class DemoGUI(customtkinter.CTk):
         self.server_button.configure(command= lambda:connect_to_server(self.server_button))
         
         # button for changing client status
+        global status_button
         self.set_status_button = customtkinter.CTkButton(master=self.clients_frame, text="Change Status", fg_color=button_colour, border_width=1, border_color="black",text_color="black")
         self.set_status_button.grid(row=0, padx=10, pady=10 , sticky='nw')
-        self.set_status_button.configure(command= lambda:change_status_to_available(self.set_status_button,q))
+        self.set_status_button.configure(command= lambda:change_status_to_available(self.set_status_button,q), state="disabled")
+        status_button = self.set_status_button
         
         # create textbox         
         self.textbox = customtkinter.CTkTextbox(self.clients_frame, fg_color="white", activate_scrollbars=True,text_color="black", border_color="black", border_width=1)
@@ -133,13 +135,27 @@ class DemoGUI(customtkinter.CTk):
         self.textbox.configure(state="disabled")
 
         # create the refresh button
-        self.refresh_button = customtkinter.CTkButton(master=self.clients_frame, text="Refresh", fg_color=button_colour, border_width=1, border_color="black",text_color="black")
+        global refresh_button
+        self.refresh_button = customtkinter.CTkButton(master=self.clients_frame, text="Refresh", fg_color=button_colour, border_width=1, border_color="black",text_color="black", state="disabled")
         self.refresh_button.grid(row=1, column=0,padx=(10,10),pady=10 , sticky='ne')
-        self.refresh_button.configure(command=lambda: populate_client_list(self.textbox))
+        self.refresh_button.configure(command=lambda: populate_client_list(self.textbox), state="disabled")
+        refresh_button = self.refresh_button
   
         # create the client connect button 
-        self.client_connect_button = customtkinter.CTkButton(master=self.clients_frame, text="Connect to client", fg_color=button_colour,command=connect_to_client, border_width=1, border_color="black",text_color="black")
+        global client_connect_button
+        self.client_connect_button = customtkinter.CTkButton(master=self.clients_frame, text="Connect to client", fg_color=button_colour,command=connect_to_client, border_width=1, border_color="black",text_color="black", state="disabled")
         self.client_connect_button.grid(row=1, column=0,padx=(10,10),pady=10 , sticky='nw')
+        client_connect_button = self.client_connect_button
+        
+def enable_server_buttons():
+    status_button.configure(state="normal")
+    refresh_button.configure(state="normal")
+    client_connect_button.configure(state="normal")
+
+def disable_server_buttons():
+    status_button.configure(state="disabled")
+    refresh_button.configure(state="disabled")
+    client_connect_button.configure(state="disabled")
 
 def connect_to_server(button):
     name=""
@@ -168,7 +184,7 @@ def connect_to_server(button):
             return
 
         send_TCP_message(CreateRequestConnectionMessage(name))
-
+        enable_server_buttons()
         button.configure(text="Disconnect",fg_color="Red", command= lambda: disconnect_from_server(button))
     except:
         errorbox = tkinter.messagebox.Message(master=None, message="Server not found", title = "Error")
@@ -176,8 +192,9 @@ def connect_to_server(button):
 
 def disconnect_from_server(button):
     try:
-        send_TCP_message(CreateAssertUnavailableMessage(our_name))
+        send_TCP_message(CreateAssertUnavailableMessage(our_name, port_we_listen_on))
         button.configure(text="Connect to server", fg_color=button_colour , command= lambda:connect_to_server(button))
+        disable_server_buttons()
     except:
         errorbox = tkinter.messagebox.Message(master=None, message="Failed to disconnect", title = "Error")
         errorbox.show()
@@ -313,7 +330,7 @@ def request_waiter(q): # this port is (port we listen on - whoever is running th
                     
                 
             while connectedToPeer:
-                message, peer_address = UDPSocket.recvfrom(2024)
+                message, peer_address = UDPSocket.recvfrom(4096)
                 peer_ip = peer_address[0]
                 message = message.decode() 
                 if peer_ip == accepted_peer:
@@ -335,7 +352,23 @@ def request_waiter(q): # this port is (port we listen on - whoever is running th
                         errorbox = tkinter.messagebox.Message(master=None, message="Your last message failed to arrive, please resend it", title = "Message not sent")
                         errorbox.show()
                         continue
-                                                    
+                    
+                    if message[0:4] == "FILE":
+                        peer_name = message.split("-")[1]
+                        filename = message.split("-")[2]
+                        filesize = message.split("-")[3]
+                        file_contents = message.split("-")[4]
+                        
+                        msg_box = tkinter.messagebox.askquestion('Incoming file', f'{accepted_peer_name} has sent you a file called: {filename} Would you like to download it?', icon='question')
+                        if msg_box == 'yes':
+                                
+                            f = open(filename, "w")
+                            f.write(file_contents)
+                            time.sleep(1)
+                            filebox = tkinter.messagebox.Message(master=None, message="File Downloaded", title = "File")
+                            filebox.show()
+                            f.close()
+                                            
                     elif message[0:4] == "DATA":
                         messagesize = int(message.split("-")[1])
                         message=message.split("-")[2]
@@ -383,13 +416,22 @@ def disconnect_client():
         UDPSocket.sendto(message.encode(), other_client_address)
 
 def upload_file():
-    filename = filedialog.askopenfilename()
-    
-    print(filename) 
-    return
+    filename = filedialog.askopenfilename(filetypes=[("Text files", ".txt"), ("Image Files", ".png .jpg")])
+    if filename is not None:
+        f = open(filename, "r")
+        file_contents = f.read()
+        print("File Contents:\n" + file_contents)
+        other_client_address = q.get()
+        q.put(other_client_address)
+        f.close()
+    else:
+        errorbox = tkinter.messagebox.Message(master=None, message="Unable to get file", title = "File Error")
+        errorbox.show()
 
-def download_file():
-    return
+    filename = filename.split("/").pop() 
+    message = CreateFilePackageForClient(our_name,filename,0,file_contents)
+    UDPSocket.sendto(message.encode(), other_client_address)
+    print(f"File being sent: {filename}")
 
 
 def CreateRequestConnectionMessage(name):
@@ -416,11 +458,8 @@ def CreateRequestPeerToPeerCommunication(name, our_ip ,our_port):
 def CreateBusyChatMessage(client_id):
     return f"COMMAND-BUSYCHAT-{client_id}"
 
-def CreateFilePackage(visibility, filename, filesize, clientid, filecontents):
-    return f"COMMAND-UPLOAD-{visibility}-{filename}-{filesize}-{clientid}-{filecontents}"
-
-def CreateDownloadFileCommand(filename, client_id):
-    return f"COMMAND-DOWNLOAD-{filename}-{client_id}"
+def CreateFilePackageForClient(our_name,filename, filesize, filecontents):
+    return f"FILE-{our_name}-{filename}-{filesize}-{filecontents}"
 
 if __name__ == "__main__":
     app = DemoGUI()
